@@ -73,37 +73,54 @@ std::vector<VkDescriptorSetLayout>g_DescriptorSetLayouts;
 std::vector<FourierTransform>g_FourierTransform;
 
 glm::vec3 g_LineColor = glm::vec3(1.0f, .0f, .0f);
-bufferInfo g_Vertex;
 bufferInfo g_Position;
 uint32_t g_VertexCount;
+std::vector<bufferInfo>g_Vertex(2);//0是图形, 1是正玄波
 
 bool g_PlayAnimation;
 float g_ProgressRate = 360.0f;
 bool g_ShowIncreaseFourierTransform;
-void getVertex(std::vector<Vertex>&vertices, float fEnd = 360.0f){
+void FourierTransformGraphics(float radians, glm::vec3&pos){
+    float sinVal = 0, cosVal = 0;
+    for (size_t uiFt = 0; uiFt < g_FourierTransform.size(); ++uiFt){
+        if(g_FourierTransform[uiFt].available){
+            //                                                                                            目前因为imgui可以输入负数。所以这里直接+(当然也可以直接-)
+            sinVal += g_FourierTransform[uiFt].amplitude * glm::sin(g_FourierTransform[uiFt].frequency * radians + g_FourierTransform[uiFt].phase);
+            cosVal += g_FourierTransform[uiFt].amplitude * glm::cos(g_FourierTransform[uiFt].frequency * radians + g_FourierTransform[uiFt].phase);
+        }
+    }
+    pos.x = sinVal;
+    pos.y = cosVal;
+    pos.z = .0f;
+}
+void FourierTransformSin(float radians, glm::vec3&pos){
+    float sinVal = 0, cosVal = 0;
+    for (size_t uiFt = 0; uiFt < g_FourierTransform.size(); ++uiFt){
+        if(g_FourierTransform[uiFt].available){
+            //                                                                                            目前因为imgui可以输入负数。所以这里直接+(当然也可以直接-)
+            sinVal += g_FourierTransform[uiFt].amplitude * glm::sin(g_FourierTransform[uiFt].frequency * radians + g_FourierTransform[uiFt].phase);
+        }
+    }
+    pos.x = radians;
+    pos.y = sinVal;
+    pos.z = .0f;
+}
+void getVertex(std::vector<Vertex>&vertices, void(*callback)(float, glm::vec3&), float fEnd = 360.0f){
     vertices.clear();
-    float val;;
     Vertex v;
     v.Color = g_LineColor;
     for (float i = 0; i < fEnd; i += .1f){
-        val = glm::radians(i);
-        float sinVal = 0, cosVal = 0;
-        for (size_t uiFt = 0; uiFt < g_FourierTransform.size(); ++uiFt){
-            if(g_FourierTransform[uiFt].available){
-                //                                                                                            目前因为imgui可以输入负数。所以这里直接+(当然也可以直接-)
-                sinVal += g_FourierTransform[uiFt].amplitude * glm::sin(g_FourierTransform[uiFt].frequency * val + g_FourierTransform[uiFt].phase);
-                cosVal += g_FourierTransform[uiFt].amplitude * glm::cos(g_FourierTransform[uiFt].frequency * val + g_FourierTransform[uiFt].phase);
-            }
-        }        
-        v.Position = glm::vec3(sinVal, cosVal, .0f);
+        callback(glm::radians(i), v.Position);
         vertices.push_back(v);
     }
     g_VertexCount = vertices.size();
 }
 void updateVertexData(float fEnd = (360.0F)){
     std::vector<Vertex>vertices;
-    getVertex(vertices, fEnd);
-    bufferData(g_VulkanBasic.device, vertices.size() * sizeof(Vertex), vertices.data(), g_Vertex.memory);
+    getVertex(vertices, FourierTransformGraphics, fEnd);
+    bufferData(g_VulkanBasic.device, vertices.size() * sizeof(Vertex), vertices.data(), g_Vertex[0].memory);
+    getVertex(vertices, FourierTransformSin, fEnd);
+    bufferData(g_VulkanBasic.device, vertices.size() * sizeof(Vertex), vertices.data(), g_Vertex[1].memory);
 }
 void playAnimation(){
     g_ProgressRate += .1f;
@@ -268,16 +285,16 @@ void recodeCommand(uint32_t currentFrame){
     vkCmdBeginRenderPass(g_CommandBuffers, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
     if(g_GraphicsPipeline.BindPipeline(g_CommandBuffers)){
         static const VkDeviceSize vertexOffset = 0;
-        static const glm::mat4 projection = glm::mat4(1.0f);//glm::ortho(0.0f, (float)g_WindowWidth, 0.0f, (float)g_WindowHeight, -1.0f, 1.0f);//glm::mat4(1.0f);
-        for (size_t uiScreen = 0; uiScreen < 1; ++uiScreen){
-            // view[uiScreen].maxDepth = 1;
-            // view[uiScreen].width = g_WindowWidth;
-            // view[uiScreen].height = g_WindowHeight;
-            // scissor[uiScreen].extent = { g_WindowWidth, g_WindowHeight };
-            // vkCmdSetViewport(g_CommandBuffers, 0, 1, &view[uiScreen]);
-            // vkCmdSetScissor(g_CommandBuffers, 0, 1, &scissor[uiScreen]);
+        static const glm::mat4 projection = glm::ortho(0.0f, (float)g_WindowWidth, 0.0f, (float)g_WindowHeight, -1.0f, 1.0f);//glm::mat4(1.0f);
+        for (size_t uiScreen = 0; uiScreen < 2; ++uiScreen){
+            view[uiScreen].maxDepth = 1;
+            view[uiScreen].width = g_WindowWidth;
+            view[uiScreen].height = g_WindowHeight * .5f;
+            scissor[uiScreen].extent = { g_WindowWidth, g_WindowHeight };
+            vkCmdSetViewport(g_CommandBuffers, 0, 1, &view[uiScreen]);
+            vkCmdSetScissor(g_CommandBuffers, 0, 1, &scissor[uiScreen]);
             vkCmdPushConstants(g_CommandBuffers, g_GraphicsPipeline.GetLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &projection);
-            vkCmdBindVertexBuffers(g_CommandBuffers, 0, 1, &g_Vertex.buffer, &vertexOffset);
+            vkCmdBindVertexBuffers(g_CommandBuffers, 0, 1, &g_Vertex[uiScreen].buffer, &vertexOffset);
             for (size_t i = 0; i < g_DescriptorSets.size(); ++i){
                 vkCmdBindDescriptorSets(g_CommandBuffers, VK_PIPELINE_BIND_POINT_GRAPHICS, g_GraphicsPipeline.GetLayout(), i, 1, &g_DescriptorSets[i], 0, nullptr);
             }
@@ -301,12 +318,17 @@ void setup(GLFWwindow *window){//不能直接修改，应该考虑以后测试�
     // ft.available = true;
     g_FourierTransform.push_back(ft);
     std::vector<Vertex>vertices;
-    getVertex(vertices);
-    createBuffer(g_VulkanBasic.device,  vertices.size() * sizeof(Vertex), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, g_Vertex);
-    bufferData(g_VulkanBasic.device, vertices.size() * sizeof(Vertex), vertices.data(), g_Vertex.memory);
-    createBuffer(g_VulkanBasic.device, sizeof(glm::mat4), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, g_Position);
+    getVertex(vertices, FourierTransformGraphics);
+    createBuffer(g_VulkanBasic.device,  vertices.size() * sizeof(Vertex), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, g_Vertex[0]);
+    bufferData(g_VulkanBasic.device, vertices.size() * sizeof(Vertex), vertices.data(), g_Vertex[0].memory);
     
-    glm::mat4 model = glm::scale(glm::mat4(1.0f), glm::vec3(.25f, .25f, 1));
+    getVertex(vertices, FourierTransformSin);
+    createBuffer(g_VulkanBasic.device,  vertices.size() * sizeof(Vertex), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, g_Vertex[1]);
+    bufferData(g_VulkanBasic.device, vertices.size() * sizeof(Vertex), vertices.data(), g_Vertex[1].memory);
+    
+    createBuffer(g_VulkanBasic.device, sizeof(glm::mat4), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, g_Position);
+    glm::mat4 model = glm::scale(glm::translate(glm::mat4(1.0f), glm::vec3(100.0f, 200.0f, 0)), glm::vec3(50.0f, 100.0f, 1));
+    // glm::mat4 model = glm::scale(glm::mat4(1.0f), glm::vec3(.25f, .25f, 1));
     bufferData(g_VulkanBasic.device, sizeof(glm::mat4(1.0f)), &model, g_Position.memory);
 
     std::vector<uint32_t>cacheData;
@@ -320,8 +342,8 @@ void setup(GLFWwindow *window){//不能直接修改，应该考虑以后测试�
     GraphicsPipelineStateInfo pipelineState;
     pipelineState.mInputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_LINE_STRIP;
     g_GraphicsPipeline.SetStateInfo(pipelineState);
-    g_GraphicsPipeline.PushScissor(g_WindowWidth, g_WindowHeight);
-    g_GraphicsPipeline.PushViewport(g_WindowWidth, g_WindowHeight);
+    // g_GraphicsPipeline.PushScissor(g_WindowWidth, g_WindowHeight);
+    // g_GraphicsPipeline.PushViewport(g_WindowWidth, g_WindowHeight);
     VK_CHECK(g_GraphicsPipeline.CreateCache(g_VulkanBasic.device, cacheData));
     VK_CHECK(g_GraphicsPipeline.CreateDescriptorSetLayout(g_VulkanBasic.device, g_DescriptorSetLayouts));
     VK_CHECK(g_GraphicsPipeline.CreateLayout(g_VulkanBasic.device, g_DescriptorSetLayouts));
@@ -378,7 +400,9 @@ void cleanup(GLFWwindow* window){
     std::vector<uint32_t>cacheData;
     g_GraphicsPipeline.DestroyCache(g_VulkanBasic.device, cacheData);
     writeFileContent("GraphicsPipelineCache", cacheData.data(), cacheData.size() * sizeof(uint32_t));
-    destroyBuffer(g_VulkanBasic.device, g_Vertex);
+    for (size_t i = 0; i < g_Vertex.size(); ++i){
+        destroyBuffer(g_VulkanBasic.device, g_Vertex[i]);
+    }    
     destroyBuffer(g_VulkanBasic.device, g_Position);
     for (size_t i = 0; i < g_DescriptorSetLayouts.size(); ++i){
         vkDestroyDescriptorSetLayout(g_VulkanBasic.device, g_DescriptorSetLayouts[i], nullptr);g_DescriptorSetLayouts[i] = nullptr;
