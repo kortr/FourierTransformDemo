@@ -19,9 +19,9 @@
 // #define ARRAY_COUNT(ARRAY) (sizeof(ARRAY) / sizeof(ARRAY[0]))
 struct FourierTransform{
     bool available;
-    float phase;
-    float amplitude;
-    float frequency;
+    double phase;
+    double amplitude;
+    double frequency;
     FourierTransform(){
         available = true;
         phase = 0;
@@ -41,7 +41,7 @@ extern QueueFamilyIndices g_QueueFamilyIndices;
 vulkanBasicInfo                 g_VulkanBasic;
 vulkanWindowInfo                g_VulkanWindow;
 //---------------------
-const uint32_t			g_WindowWidth = 800;//上下分屏。一边显示图形。一边显示正弦函数
+const uint32_t			g_WindowWidth = 800;//上下分屏。一边显示图形。一边显示波形
 const uint32_t			g_WindowHeight = g_WindowWidth;
 
 VkCommandBuffer    g_CommandBuffers;
@@ -55,13 +55,13 @@ std::vector<FourierTransform>g_FourierTransform;
 glm::vec3 g_LineColor = glm::vec3(1.0f, .0f, .0f);
 bufferInfo g_Position;
 uint32_t g_VertexCount;
-std::vector<bufferInfo>g_Vertex(2);//0是图形, 1是正弦波
+std::vector<bufferInfo>g_Vertex(2);//0是图形, 1是波形
 
 bool g_PlayAnimation;
-float g_ProgressRate = MAX_PROGRESS_RATE;
+double g_ProgressRate = MAX_PROGRESS_RATE;
 bool g_ShowIncreaseFourierTransform;
-void FourierTransformGraphics(float radians, glm::vec3&pos){
-    float sinVal = 0, cosVal = 0;
+void FourierTransformGraphics(double radians, glm::vec3&pos){
+    double sinVal = 0, cosVal = 0;
     for (size_t uiFt = 0; uiFt < g_FourierTransform.size(); ++uiFt){
         if(g_FourierTransform[uiFt].available){
             //                                                                                            因为imgui可以输入负数。所以这里直接+(当然也可以直接-)
@@ -73,8 +73,8 @@ void FourierTransformGraphics(float radians, glm::vec3&pos){
     pos.y = cosVal;
     pos.z = .0f;
 }
-void FourierTransformSin(float radians, glm::vec3&pos){
-    float sinVal = 0, cosVal = 0;
+void FourierTransformSin(double radians, glm::vec3&pos){
+    double sinVal = 0, cosVal = 0;
     for (size_t uiFt = 0; uiFt < g_FourierTransform.size(); ++uiFt){
         if(g_FourierTransform[uiFt].available){
             //                                                                                            目前因为imgui可以输入负数。所以这里直接+(当然也可以直接-)
@@ -85,17 +85,17 @@ void FourierTransformSin(float radians, glm::vec3&pos){
     pos.y = sinVal;
     pos.z = .0f;
 }
-void getVertex(std::vector<Vertex>&vertices, void(*callback)(float, glm::vec3&), float fEnd = MAX_PROGRESS_RATE){
+void getVertex(std::vector<Vertex>&vertices, void(*callback)(double, glm::vec3&), double fEnd = MAX_PROGRESS_RATE){
     vertices.clear();
     Vertex v;
     v.Color = g_LineColor;
-    for (float i = 0; i < fEnd; i += .1f){
+    for (double i = 0; i < fEnd; i += .1f){
         callback(glm::radians(i), v.Position);
         vertices.push_back(v);
     }
     g_VertexCount = vertices.size();
 }
-void updateVertexData(float fEnd = MAX_PROGRESS_RATE){
+void updateVertexData(double fEnd = MAX_PROGRESS_RATE){
     std::vector<Vertex>vertices;
     getVertex(vertices, FourierTransformGraphics, fEnd);
     bufferData(g_VulkanBasic.device, vertices.size() * sizeof(Vertex), vertices.data(), g_Vertex[0].memory);
@@ -135,9 +135,9 @@ void updateDescriptorSet(){
 }
 void drawFourierTransform(FourierTransform&ft){
     if(ImGui::BeginTable("圆表格相关", 3)){
-        ImGui::TableNextColumn();ImGui::InputFloat("振幅", &ft.amplitude);
-        ImGui::TableNextColumn();ImGui::InputFloat("相位", &ft.phase);
-        ImGui::TableNextColumn();ImGui::InputFloat("频率", &ft.frequency);
+        ImGui::TableNextColumn();ImGui::InputDouble("振幅", &ft.amplitude);
+        ImGui::TableNextColumn();ImGui::InputDouble("相位", &ft.phase);
+        ImGui::TableNextColumn();ImGui::InputDouble("频率", &ft.frequency);
         ImGui::EndTable();
     }
 }
@@ -154,12 +154,12 @@ void updateImguiWidget(){
     ImGui_ImplVulkan_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
-    // static float test = 0;
+    // static double test = 0;
     // ImGui::DragInt("拖动条", &test);//确实可以拖动。但不是类似一条线中间有个圆的样子
     ImGui::Begin("傅里叶变换");
         //ImGui::ProgressBar(90);
         // ImGui::SameLine();
-        // ImGui::SliderFloat("滑块", &test, .0f, 1.0f);
+        // ImGui::Sliderdouble("滑块", &test, .0f, 1.0f);
         char buffer[MAXBYTE] = {0};
         static float lineColor[3] = { g_LineColor.x, g_LineColor.y, g_LineColor.z };
         ImGui::ColorEdit3("线颜色", lineColor);
@@ -173,22 +173,25 @@ void updateImguiWidget(){
         for (auto it = g_FourierTransform.begin(); it != g_FourierTransform.end(); ++it){
             sprintf(buffer, "第%d个圆", index++ + 1);
             if(ImGui::TreeNode(buffer)){
-                float val[3] = { it->amplitude, it->frequency, it->phase };
+                double val[3] = { it->amplitude, it->frequency, it->phase };
                 drawFourierTransform(it);
+                if(it->amplitude != val[0] || it->frequency != val[1] || it->phase != val[2]){
+                    updateVertexData(g_ProgressRate);
+                }
                 if(ImGui::BeginTable("启用或删除", 2)){
                     ImGui::TableNextColumn();ImGui::Checkbox("启用", &it->available);
                     ImGui::TableNextColumn();
                     if(ImGui::Button("删除")){
                         g_FourierTransform.erase(it);
+                        ImGui::EndTable();
+                        ImGui::TreePop();
+                        break;
                     }
-                    updateVertexData(g_ProgressRate);//播放动画时。或许不应该继续更新和删除
+                    // updateVertexData(g_ProgressRate);//播放动画时。或许不应该继续更新和删除
                     ImGui::EndTable();
                 }
-                if(it->amplitude != val[0] || it->frequency != val[1] || it->phase != val[2]){
-                    updateVertexData(g_ProgressRate);
-                }
                 ImGui::TreePop();
-            }            
+            }
         }
         if(ImGui::BeginTable("操作按钮", 2)){
             ImGui::TableNextColumn();
@@ -215,10 +218,14 @@ void updateImguiWidget(){
             static FourierTransform ft;
             // ft.available = true;
             drawFourierTransform(ft);
+            static int count = 1;
+            ImGui::InputInt("个数", &count);
             if(ImGui::BeginTable("操作按钮表格", 2)){
                 ImGui::TableNextColumn();
                 if(ImGui::Button("确定")){
-                    g_FourierTransform.push_back(ft);
+                    for (size_t i = 0; i < count; ++i){
+                        g_FourierTransform.push_back(ft);
+                    }                
                     updateVertexData(g_ProgressRate);
                     g_ShowIncreaseFourierTransform = false;
                 }
@@ -320,6 +327,8 @@ void setup(GLFWwindow *window){//不能直接修改，应该考虑以后测试�
         g_GraphicsPipeline.IncreaseShader(g_VulkanBasic.device, code);
     }
     GraphicsPipelineStateInfo pipelineState;
+    // pipelineState.mInputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
+    // pipelineState.mInputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
     pipelineState.mInputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_LINE_STRIP;
     g_GraphicsPipeline.SetStateInfo(pipelineState);
     // g_GraphicsPipeline.PushScissor(g_WindowWidth, g_WindowHeight);
