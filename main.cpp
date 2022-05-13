@@ -15,6 +15,7 @@
 #include "glm/glm.hpp"
 #include "glm/gtc/matrix_transform.hpp"
 #define MAXBYTE 0xff
+#define MAX_PROGRESS_RATE 360.0f
 // #define ARRAY_COUNT(ARRAY) (sizeof(ARRAY) / sizeof(ARRAY[0]))
 struct FourierTransform{
     bool available;
@@ -31,27 +32,6 @@ struct FourierTransform{
 struct Vertex {
     glm::vec3 Position;
     glm::vec3 Color;
-    static VkVertexInputBindingDescription getBindingDescription() {
-        VkVertexInputBindingDescription bindingDescription = {};
-        bindingDescription.binding = 0;
-        bindingDescription.stride = sizeof(Vertex);
-        bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-
-        return bindingDescription;
-}
-
-    static std::vector<VkVertexInputAttributeDescription> getAttributeDescriptions() {
-        VkFormat formt[] = { VK_FORMAT_R32G32B32_SFLOAT, VK_FORMAT_R32G32B32_SFLOAT };
-        uint32_t offset[] = { offsetof(Vertex, Position), offsetof(Vertex, Color) };
-        std::vector<VkVertexInputAttributeDescription> attributeDescriptions(sizeof(formt) / sizeof(VkFormat));
-        for (size_t i = 0; i < attributeDescriptions.size(); i++) {
-                attributeDescriptions[i].binding = 0;
-                attributeDescriptions[i].location = i;
-                attributeDescriptions[i].format = formt[i];
-                attributeDescriptions[i].offset = offset[i];
-        }
-        return attributeDescriptions;
-    }
 };
 
 extern VkQueue	g_Graphics;
@@ -61,7 +41,7 @@ extern QueueFamilyIndices g_QueueFamilyIndices;
 vulkanBasicInfo                 g_VulkanBasic;
 vulkanWindowInfo                g_VulkanWindow;
 //---------------------
-const uint32_t			g_WindowWidth = 800;//上下分屏。一边显示图形。一边显示正玄函数
+const uint32_t			g_WindowWidth = 800;//上下分屏。一边显示图形。一边显示正弦函数
 const uint32_t			g_WindowHeight = g_WindowWidth;
 
 VkCommandBuffer    g_CommandBuffers;
@@ -75,16 +55,16 @@ std::vector<FourierTransform>g_FourierTransform;
 glm::vec3 g_LineColor = glm::vec3(1.0f, .0f, .0f);
 bufferInfo g_Position;
 uint32_t g_VertexCount;
-std::vector<bufferInfo>g_Vertex(2);//0是图形, 1是正玄波
+std::vector<bufferInfo>g_Vertex(2);//0是图形, 1是正弦波
 
 bool g_PlayAnimation;
-float g_ProgressRate = 360.0f;
+float g_ProgressRate = MAX_PROGRESS_RATE;
 bool g_ShowIncreaseFourierTransform;
 void FourierTransformGraphics(float radians, glm::vec3&pos){
     float sinVal = 0, cosVal = 0;
     for (size_t uiFt = 0; uiFt < g_FourierTransform.size(); ++uiFt){
         if(g_FourierTransform[uiFt].available){
-            //                                                                                            目前因为imgui可以输入负数。所以这里直接+(当然也可以直接-)
+            //                                                                                            因为imgui可以输入负数。所以这里直接+(当然也可以直接-)
             sinVal += g_FourierTransform[uiFt].amplitude * glm::sin(g_FourierTransform[uiFt].frequency * radians + g_FourierTransform[uiFt].phase);
             cosVal += g_FourierTransform[uiFt].amplitude * glm::cos(g_FourierTransform[uiFt].frequency * radians + g_FourierTransform[uiFt].phase);
         }
@@ -105,7 +85,7 @@ void FourierTransformSin(float radians, glm::vec3&pos){
     pos.y = sinVal;
     pos.z = .0f;
 }
-void getVertex(std::vector<Vertex>&vertices, void(*callback)(float, glm::vec3&), float fEnd = 360.0f){
+void getVertex(std::vector<Vertex>&vertices, void(*callback)(float, glm::vec3&), float fEnd = MAX_PROGRESS_RATE){
     vertices.clear();
     Vertex v;
     v.Color = g_LineColor;
@@ -115,7 +95,7 @@ void getVertex(std::vector<Vertex>&vertices, void(*callback)(float, glm::vec3&),
     }
     g_VertexCount = vertices.size();
 }
-void updateVertexData(float fEnd = (360.0F)){
+void updateVertexData(float fEnd = MAX_PROGRESS_RATE){
     std::vector<Vertex>vertices;
     getVertex(vertices, FourierTransformGraphics, fEnd);
     bufferData(g_VulkanBasic.device, vertices.size() * sizeof(Vertex), vertices.data(), g_Vertex[0].memory);
@@ -124,8 +104,8 @@ void updateVertexData(float fEnd = (360.0F)){
 }
 void playAnimation(){
     g_ProgressRate += .1f;
-    if(g_ProgressRate > 360.0f){
-        g_ProgressRate = 360.0f;
+    if(g_ProgressRate > MAX_PROGRESS_RATE){
+        g_ProgressRate = MAX_PROGRESS_RATE;
         g_PlayAnimation = false;
         return;
     }
@@ -223,7 +203,7 @@ void updateImguiWidget(){
                     g_ProgressRate = .0f;
                 }
                 else{
-                    g_ProgressRate = 360.0f;
+                    g_ProgressRate = MAX_PROGRESS_RATE;
                     updateVertexData();
                 }
             }
@@ -275,8 +255,8 @@ void recodeCommand(uint32_t currentFrame){
     vkDeviceWaitIdle(g_VulkanBasic.device);
     vkResetCommandBuffer(g_CommandBuffers, VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT);
     if(VK_SUCCESS != vkBeginCommandBuffer(g_CommandBuffers, &beginInfo)){
-            std::cout << "vkBeginCommandBuffer failed" << std::endl;
-            return;
+        std::cout << "vkBeginCommandBuffer failed" << std::endl;
+        return;
     }
     std::vector<VkViewport> view(2);
     view[1].y = g_WindowHeight * .5f;
@@ -327,7 +307,7 @@ void setup(GLFWwindow *window){//不能直接修改，应该考虑以后测试�
     bufferData(g_VulkanBasic.device, vertices.size() * sizeof(Vertex), vertices.data(), g_Vertex[1].memory);
     
     createBuffer(g_VulkanBasic.device, sizeof(glm::mat4), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, g_Position);
-    glm::mat4 model = glm::scale(glm::translate(glm::mat4(1.0f), glm::vec3(100.0f, 200.0f, 0)), glm::vec3(50.0f, 100.0f, 1));
+    glm::mat4 model = glm::scale(glm::translate(glm::mat4(1.0f), glm::vec3(200.0f, 300.0f, 0)), glm::vec3(50.0f, 100.0f, 1));
     // glm::mat4 model = glm::scale(glm::mat4(1.0f), glm::vec3(.25f, .25f, 1));
     bufferData(g_VulkanBasic.device, sizeof(glm::mat4(1.0f)), &model, g_Position.memory);
 
@@ -454,7 +434,7 @@ int main(int32_t argc, char *argv[]){
     std::vector<const char*> extensions(instanceExtension, instanceExtension + count);
     setupVulkan(extensions, { }, g_VulkanBasic, createSurface, window);
     setupVulkanWindow(g_VulkanBasic.physicalDevice, g_VulkanBasic.device, g_VulkanWindow, VK_TRUE);
-    createPool(g_VulkanBasic.device, 10, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+    createPool(g_VulkanBasic.device, 2, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
     setup(window);
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
