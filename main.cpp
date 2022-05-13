@@ -154,7 +154,7 @@ void updateImguiWidget(){
     ImGui_ImplVulkan_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
-    static float test = 0;
+    // static float test = 0;
     // ImGui::DragInt("拖动条", &test);//确实可以拖动。但不是类似一条线中间有个圆的样子
     ImGui::Begin("傅里叶变换");
         //ImGui::ProgressBar(90);
