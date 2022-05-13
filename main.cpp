@@ -1,4 +1,4 @@
-#include <time.h>
+#include <list>
 #ifdef __linux
 #include <unistd.h>
 #include <dirent.h>
@@ -50,7 +50,7 @@ GraphicsPipeline g_GraphicsPipeline;
 std::vector<VkDescriptorSet>g_DescriptorSets;
 std::vector<VkDescriptorSetLayout>g_DescriptorSetLayouts;
 
-std::vector<FourierTransform>g_FourierTransform;
+std::list<FourierTransform>g_FourierTransform;
 
 glm::vec3 g_LineColor = glm::vec3(1.0f, .0f, .0f);
 bufferInfo g_Position;
@@ -62,11 +62,11 @@ double g_ProgressRate = MAX_PROGRESS_RATE;
 bool g_ShowIncreaseFourierTransform;
 void FourierTransformGraphics(double radians, glm::vec3&pos){
     double sinVal = 0, cosVal = 0;
-    for (size_t uiFt = 0; uiFt < g_FourierTransform.size(); ++uiFt){
-        if(g_FourierTransform[uiFt].available){
-            //                                                                                            因为imgui可以输入负数。所以这里直接+(当然也可以直接-)
-            sinVal += g_FourierTransform[uiFt].amplitude * glm::sin(g_FourierTransform[uiFt].frequency * radians + g_FourierTransform[uiFt].phase);
-            cosVal += g_FourierTransform[uiFt].amplitude * glm::cos(g_FourierTransform[uiFt].frequency * radians + g_FourierTransform[uiFt].phase);
+    for (auto it = g_FourierTransform.begin(); it != g_FourierTransform.end(); ++it){
+        if(it->available){
+            //                                                     imgui可以输入负数, 这里直接+(当然也可以直接-)
+            sinVal += it->amplitude * glm::sin(it->frequency * radians + it->phase);
+            cosVal += it->amplitude * glm::cos(it->frequency * radians + it->phase);
         }
     }
     pos.x = sinVal;
@@ -75,10 +75,9 @@ void FourierTransformGraphics(double radians, glm::vec3&pos){
 }
 void FourierTransformSin(double radians, glm::vec3&pos){
     double sinVal = 0, cosVal = 0;
-    for (size_t uiFt = 0; uiFt < g_FourierTransform.size(); ++uiFt){
-        if(g_FourierTransform[uiFt].available){
-            //                                                                                            目前因为imgui可以输入负数。所以这里直接+(当然也可以直接-)
-            sinVal += g_FourierTransform[uiFt].amplitude * glm::sin(g_FourierTransform[uiFt].frequency * radians + g_FourierTransform[uiFt].phase);
+    for (auto it = g_FourierTransform.begin(); it != g_FourierTransform.end(); ++it){
+        if(it->available){
+            sinVal += it->amplitude * glm::sin(it->frequency * radians + it->phase);
         }
     }
     pos.x = radians;
@@ -141,7 +140,7 @@ void drawFourierTransform(FourierTransform&ft){
         ImGui::EndTable();
     }
 }
-void drawFourierTransform(std::vector<FourierTransform>::iterator&ft){
+void drawFourierTransform(std::list<FourierTransform>::iterator&ft){
     drawFourierTransform(*ft);
 }
 // void drawFourierTransform(std::vector<FourierTransform>&ft){
@@ -202,7 +201,6 @@ void updateImguiWidget(){
             if(ImGui::Button("播放")){
                 g_PlayAnimation = !g_PlayAnimation;
                 if(g_PlayAnimation){
-                    
                     g_ProgressRate = .0f;
                 }
                 else{
