@@ -158,7 +158,9 @@ void updateImguiWidget(){
     ImGui::Begin("傅里叶变换");
         //ImGui::ProgressBar(90);
         // ImGui::SameLine();
+        // char testBuffer[MAXBYTE] = { 0 };
         // ImGui::Sliderdouble("滑块", &test, .0f, 1.0f);
+        // ImGui::InputText("输入中文试试", testBuffer, MAXBYTE);
         char buffer[MAXBYTE] = {0};
         static float lineColor[3] = { g_LineColor.x, g_LineColor.y, g_LineColor.z };
         ImGui::ColorEdit3("线颜色", lineColor);
@@ -172,11 +174,9 @@ void updateImguiWidget(){
         for (auto it = g_FourierTransform.begin(); it != g_FourierTransform.end(); ++it){
             sprintf(buffer, "第%d个圆", index++ + 1);
             if(ImGui::TreeNode(buffer)){
+                bool bAvailable = it->available;
                 double val[3] = { it->amplitude, it->frequency, it->phase };
                 drawFourierTransform(it);
-                if(it->amplitude != val[0] || it->frequency != val[1] || it->phase != val[2]){
-                    updateVertexData(g_ProgressRate);
-                }
                 if(ImGui::BeginTable("启用或删除", 2)){
                     ImGui::TableNextColumn();ImGui::Checkbox("启用", &it->available);
                     ImGui::TableNextColumn();
@@ -187,6 +187,10 @@ void updateImguiWidget(){
                         break;
                     }
                     // updateVertexData(g_ProgressRate);//播放动画时。或许不应该继续更新和删除
+                    //启用或取消启用后。没有更新顶点数组。是因为没加入available
+                    if(bAvailable != it->available || it->amplitude != val[0] || it->frequency != val[1] || it->phase != val[2]){
+                        updateVertexData(g_ProgressRate);
+                    }
                     ImGui::EndTable();
                 }
                 ImGui::TreePop();
